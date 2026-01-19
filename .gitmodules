@@ -1,3 +1,4 @@
 [submodule "services/azure-finops-manager"]
 	path = services/azure-finops-manager
 	url = https://github.com/aitimatic-GmbH/azure-finops-manager.git
+	branch = chore/cisubmodule-worklfow-conform

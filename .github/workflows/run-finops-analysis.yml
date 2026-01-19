@@ -1,0 +1,18 @@
+# File: DevOpsMaintenance/.github/workflows/run-finops-analysis.yml
+name: 'Run FinOps Analysis'
+
+on:
+  # schedule:
+  #   - cron: '0 3 * * 1' # Jeden Montag um 3 Uhr morgens
+  workflow_dispatch:
+
+jobs:
+  analyze-and-report:
+    name: 'Run FinOps Analyze & Report'
+    uses: ./services/azure-finops-manager/.github/workflows/1-analyze-and-report.yml
+    with:
+      config-path: 'config/finops.config.json'
+    secrets:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}

@@ -12,3 +12,9 @@ Thumbs.db
 *.tfstate.backup
 crash.log
 
+# CI/CD
+config/*.json
+!config/*.json.example
+
+# Local Devcontainer
+.devcontainer/*

@@ -9,7 +9,7 @@ on:
 jobs:
   analyze-and-report:
     name: 'Run FinOps Analyze & Report'
-    uses: ./services/azure-finops-manager/.github/workflows/1-analyze-and-report.yml
+    uses: ./services/azure-finops-manager/.github/workflows/0-main-workflow.yml
     with:
       config-path: 'config/finops.config.json'
     secrets:

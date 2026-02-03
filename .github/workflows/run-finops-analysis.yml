@@ -1,4 +1,4 @@
-# File: DevOpsMaintenance/.github/workflows/run-finops-analysis.yml
+# .github/workflows/run-finops-analysis.yml
 name: 'Run FinOps Analysis'
 
 on:
@@ -15,7 +15,7 @@ on:
 jobs:
   analyze-and-report:
     name: 'Run FinOps Analyze & Report'
-    uses: ./services/azure-finops-manager/.github/workflows/0-main-workflow.yml
+    uses: ./services/azure-finops-manager/.github/workflows/0-main-workflow.yml@chore/ci-submodule-workflow-conform
     with:
       config-path: 'config/finops.config.json'
     secrets:

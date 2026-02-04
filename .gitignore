@@ -20,5 +20,14 @@ config/*.json
 .devcontainer/*
 
 # local environment files
-.secrets
 *.local*
+
+# Secrets & Credentials
+.env
+.env.*
+*.key
+*.pem
+credentials.*
+*-key.json
+*service-account*.json
+.secrets

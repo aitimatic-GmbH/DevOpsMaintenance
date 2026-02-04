@@ -27,6 +27,7 @@ jobs:
         with:
           submodules: recursive
           fetch-depth: 0
+          token: ${{ secrets.PAT_SUBMODULE_CHECKOUT }}
 
       - name: 'Run FinOps Analysis'
         uses: ./services/azure-finops-manager/actions/finops-analysis

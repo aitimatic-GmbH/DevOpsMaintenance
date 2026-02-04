@@ -23,7 +23,7 @@ jobs:
 
     steps:
       - name: 'Checkout repository with submodules'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
           fetch-depth: 0
@@ -31,7 +31,7 @@ jobs:
       - name: 'Run FinOps Analysis'
         uses: ./services/azure-finops-manager/actions/finops-analysis
         with:
-          config-path: '../../config/finops.config.json'
+          config-path: './config/finops.config.json.example'
           azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
           azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           azure-subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}

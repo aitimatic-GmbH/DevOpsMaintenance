@@ -1,0 +1,80 @@
+# .github/workflows/validate-submodules.yml
+name: 'Validate Submodules'
+
+on:
+  push:
+    branches-ignore:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch: {}
+
+jobs:
+  validate:
+    name: 'Validate Submodule Configuration'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Check submodule initialization
+        run: |
+          echo "=== Checking submodule initialization ==="
+          git submodule status
+
+          if git submodule status | grep -q '^-'; then
+            echo "❌ Error: Some submodules are not initialized"
+            exit 1
+          fi
+          echo "✅ All submodules are initialized"
+
+      - name: Validate submodule branches
+        run: |
+          echo "=== Validating submodule branches ==="
+
+          # Lese alle Submodule aus .gitmodules
+          git config --file .gitmodules --get-regexp '^submodule\..*\.branch$' | while read key value; do
+            # Extrahiere Submodul-Namen
+            submodule_name=$(echo "$key" | sed 's/^submodule\.\(.*\)\.branch$/\1/')
+            submodule_path=$(git config --file .gitmodules --get "submodule.$submodule_name.path")
+            expected_branch="$value"
+
+            echo "Checking $submodule_path..."
+
+            # Gehe ins Submodul und prüfe den Branch
+            cd "$submodule_path"
+            current_branch=$(git rev-parse --abbrev-ref HEAD)
+
+            if [ "$current_branch" != "$expected_branch" ]; then
+              echo "❌ Error: Submodule '$submodule_path' is on branch '$current_branch', expected '$expected_branch'"
+              exit 1
+            fi
+
+            echo "✅ Submodule '$submodule_path' is on correct branch: $current_branch"
+            cd - > /dev/null
+          done
+
+      - name: Check for uncommitted changes
+        run: |
+          echo "=== Checking for uncommitted changes in submodules ==="
+
+          git submodule foreach --recursive '
+            if [ -n "$(git status --porcelain)" ]; then
+              echo "❌ Error: Submodule $name has uncommitted changes"
+              git status --short
+              exit 1
+            fi
+          '
+
+          echo "✅ No uncommitted changes in submodules"
+
+      - name: Display submodule information
+        if: always()
+        run: |
+          echo "=== Submodule Information ==="
+          git submodule foreach --recursive 'echo "Submodule: $name"; git log -1 --oneline; echo ""'

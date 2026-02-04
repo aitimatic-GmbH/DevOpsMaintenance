@@ -15,10 +15,23 @@ on:
 jobs:
   analyze-and-report:
     name: 'Run FinOps Analyze & Report'
-    uses: ./services/azure-finops-manager/.github/workflows/0-main-workflow.yml@chore/ci-submodule-workflow-conform
-    with:
-      config-path: 'config/finops.config.json'
-    secrets:
-      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: 'Checkout repository with submodules'
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: 'Run FinOps Analysis'
+        uses: ./services/azure-finops-manager/actions/finops-analysis
+        with:
+          config-path: '../../config/finops.config.json'
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}

@@ -21,8 +21,10 @@ jobs:
         with:
           submodules: recursive
           fetch-depth: 0
+          token: ${{ secrets.GH_PAT }}
 
       - name: Check submodule initialization
+        shell: bash
         run: |
           echo "=== Checking submodule initialization ==="
           git submodule status
@@ -34,6 +36,7 @@ jobs:
           echo "✅ All submodules are initialized"
 
       - name: Validate submodule branches
+        shell: bash
         run: |
           echo "=== Validating submodule branches ==="
 
@@ -60,6 +63,7 @@ jobs:
           done
 
       - name: Check for uncommitted changes
+        shell: bash
         run: |
           echo "=== Checking for uncommitted changes in submodules ==="
 
@@ -75,6 +79,7 @@ jobs:
 
       - name: Display submodule information
         if: always()
+        shell: bash
         run: |
           echo "=== Submodule Information ==="
           git submodule foreach --recursive 'echo "Submodule: $name"; git log -1 --oneline; echo ""'

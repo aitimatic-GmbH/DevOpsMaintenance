@@ -49,12 +49,23 @@ jobs:
 
             echo "Checking $submodule_path..."
 
-            # Gehe ins Submodul und prüfe den Branch
+            # Gehe ins Submodul
             cd "$submodule_path"
-            current_branch=$(git rev-parse --abbrev-ref HEAD)
 
-            if [ "$current_branch" != "$expected_branch" ]; then
-              echo "❌ Error: Submodule '$submodule_path' is on branch '$current_branch', expected '$expected_branch'"
+            # 1. Hole den aktuell ausgecheckten Commit (im Detached HEAD Zustand)
+            current_commit=$(git rev-parse HEAD)
+            echo "  -> Current commit is $current_commit"
+
+            # 2. Prüfe, ob dieser Commit auf dem erwarteten Remote-Branch existiert.
+            # 'git branch -r --contains <commit>' listet alle Remote-Branches auf,
+            # die diesen Commit enthalten. Wir filtern dann nach dem erwarteten Branch.
+            if git branch -r --contains "$current_commit" | grep -q "origin/$expected_branch"; then
+              echo "✅ Submodule '$submodule_path' commit exists on expected branch '$expected_branch'"
+            else
+              echo "❌ Error: Submodule '$submodule_path' commit $current_commit was NOT found on remote branch 'origin/$expected_branch'"
+              # Optional: Zeige zur Fehlersuche, auf welchen Branches der Commit wirklich ist
+              echo "  -> Commit was found on these remote branches:"
+              git branch -r --contains "$current_commit"
               exit 1
             fi
 

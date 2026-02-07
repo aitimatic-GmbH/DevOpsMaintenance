@@ -1,0 +1,156 @@
+# .github/workflows/run-monitoring-verify.yml
+name: 'Run Monitoring Verify'
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'feat/**'
+    paths:
+      - 'services/azure-managed-monitoring/**'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'services/azure-managed-monitoring/**'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  validate-bicep:
+    name: Validate Bicep Template
+    runs-on: ubuntu-latest
+
+    outputs:
+      config_path: ${{ steps.hydrate_config.outputs.config_path }}
+
+    steps:
+      - name: Checkout repository with submodules
+        uses:  actions/checkout@v6
+        with:
+          submodules: recursive
+          token: ${{ secrets.PAT_SUBMODULE_CHECKOUT }}
+
+      - name: 🧪 Bicep build (syntax check)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          az bicep version
+
+          az bicep build --file services/azure-managed-monitoring/src/main.foundation.bicep
+          az bicep build --file services/azure-managed-monitoring/src/main.assignment.bicep
+          az bicep build --file services/azure-managed-monitoring/src/main.workbook.bicep
+
+      - name: Hydrate configuration from template and secret
+        id: hydrate_config
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TEMPLATE_FILE="services/azure-managed-monitoring/config/example.config.json"
+          SECRET_OVERRIDE_FILE="$(mktemp)"
+          OUTPUT_FILE="hydrated.config.json"
+
+          trap 'rm -f "$SECRET_OVERRIDE_FILE"' EXIT
+
+          jq empty "$TEMPLATE_FILE"
+
+          SECRET_CONTENT='${{ secrets.MON_CONFIG_JSON }}'
+          [[ -n "$SECRET_CONTENT" ]] || {
+            echo "ERROR: MON_CONFIG_JSON empty" >&2
+            exit 1
+          }
+
+          printf '%s' "$SECRET_CONTENT" > "$SECRET_OVERRIDE_FILE"
+          jq empty "$SECRET_OVERRIDE_FILE"
+
+          jq -s '.[0] * .[1]' \
+            "$TEMPLATE_FILE" \
+            "$SECRET_OVERRIDE_FILE" \
+            > "$OUTPUT_FILE"
+
+          jq . "$OUTPUT_FILE"
+
+          echo "config_path=$OUTPUT_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Login to Azure using OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_WRITE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_WRITE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Show Azure & Bicep versions
+        shell: bash
+        run: |
+          az version
+          az bicep version || az bicep install
+
+      - name: Run Bicep Validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          trap 'rm -f params.foundation.json params.assignment.json' EXIT
+
+          CONFIG_FILE="${{ steps.hydrate_config.outputs.config_path }}"
+          RG_NAME=$(jq -er '.deploymentSettings.resourceGroupName' "$CONFIG_FILE")
+          DCR_NAME=$(jq -er '.bicepParameters.dcrName.value' "$CONFIG_FILE")
+          SUBSCRIPTION_ID="${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+          # Dummy-Rollen für Validation (Standard Azure Built-In Rollen)
+          DUMMY_ROLES='[
+            "92aaf0da-9dab-42b6-94a3-d43ce8d16293",
+            "749f88d5-cbae-40b8-bcfc-e573ddc772fa"
+          ]'
+
+          echo "📦 Extracting FOUNDATION parameters..."
+          jq -er '.bicepParameters | del(.initiatives)' "$CONFIG_FILE" > params.foundation.json
+
+          echo "🧪 Validating FOUNDATION template..."
+          az deployment group validate \
+            --resource-group $RG_NAME \
+            --template-file services/azure-managed-monitoring/src/main.foundation.bicep \
+            --parameters "@params.foundation.json"
+
+          echo "📦 Preparing ASSIGNMENT validation parameters..."
+
+          cat > params.assignment.json <<EOF
+          {
+          "initiativeId":  {"value": "dummy-initiative-id"},
+          "logAnalyticsWorkspaceId": {"value": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/dummy/providers/Microsoft.OperationalInsights/workspaces/dummy"},
+          "policyInitiativeScope": {"value": []},
+          "dcrName": {"value": "$DCR_NAME"},
+          "roleDefinitionIds": {"value": $DUMMY_ROLES},
+          "enableMicrosoftVMsInitiative": {"value": true}
+          }
+          EOF
+
+          echo "🧪 Validating ASSIGNMENT template..."
+          az deployment group validate \
+            --resource-group $RG_NAME \
+            --template-file services/azure-managed-monitoring/src/main.assignment.bicep \
+            --parameters "@params.assignment.json"
+
+          echo "📦 Preparing MONITORING/WORKBOOK validation parameters..."
+          WORKSPACE_NAME=$(jq -er '.bicepParameters.workspaceName.value' "$CONFIG_FILE")
+          ACTION_GROUP_NAME=$(jq -er '.bicepParameters.actionGroupName.value' "$CONFIG_FILE")
+
+          cat > params.monitoring.json <<EOF
+          {
+            "logAnalyticsWorkspaceId": {"value": "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RG_NAME/providers/Microsoft.OperationalInsights/workspaces/$WORKSPACE_NAME"},
+            "actionGroupId": {"value": "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RG_NAME/providers/microsoft.insights/actionGroups/$ACTION_GROUP_NAME"}
+
+          }
+          EOF
+
+          echo "🧪 Validating MONITORING/WORKBOOK template..."
+          az deployment group validate \
+            --resource-group $RG_NAME \
+            --template-file services/azure-managed-monitoring/src/main.workbook.bicep \
+            --parameters "@params.monitoring.json"
+
+          rm -f params.monitoring.json
+
+          echo "✅ All validations successful."

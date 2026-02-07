@@ -1,0 +1,316 @@
+# .github/workflows/run-monitoring-deploy.yml
+name: 'Run Monitoring Deploy'
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy-foundation:
+    runs-on: ubuntu-latest
+
+    outputs:
+      config_path: ${{ steps.hydrate_config.outputs.config_path }}
+
+    steps:
+      - name: Checkout repository with submodules
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          token: ${{ secrets.PAT_SUBMODULE_CHECKOUT }}
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_WRITE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_WRITE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Hydrate configuration from template and secret
+        id: hydrate_config
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TEMPLATE_FILE="services/azure-managed-monitoring/config/example.config.json"
+          SECRET_OVERRIDE_FILE="$(mktemp)"
+          OUTPUT_FILE="hydrated.config.json"
+
+          trap 'rm -f "$SECRET_OVERRIDE_FILE"' EXIT
+
+          jq empty "$TEMPLATE_FILE"
+
+          SECRET_CONTENT='${{ secrets.MON_CONFIG_JSON }}'
+          [[ -n "$SECRET_CONTENT" ]] || {
+            echo "ERROR: MON_CONFIG_JSON empty" >&2
+            exit 1
+          }
+
+          printf '%s' "$SECRET_CONTENT" > "$SECRET_OVERRIDE_FILE"
+          jq empty "$SECRET_OVERRIDE_FILE"
+
+          jq -s '.[0] * .[1]' \
+            "$TEMPLATE_FILE" \
+            "$SECRET_OVERRIDE_FILE" \
+            > "$OUTPUT_FILE"
+
+          jq . "$OUTPUT_FILE"
+
+          echo "config_path=$OUTPUT_FILE" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hydrated-config
+          path: hydrated.config.json
+
+      - name: Run Bicep Foundation Deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          trap 'rm -f params.json' EXIT
+
+          CONFIG_FILE="${{ steps.hydrate_config.outputs.config_path }}"
+
+          echo "Extracting resource group name..."
+          RG_NAME=$(jq -er '.deploymentSettings.resourceGroupName' "$CONFIG_FILE")
+
+          echo "Extracting Bicep parameters (excluding initiatives)..."
+          jq -er '.bicepParameters | del(.initiatives)' "$CONFIG_FILE" > params.json
+
+          echo "Parameter file created:"
+          jq . params.json
+
+          echo "Running deployment ..."
+          az deployment group create \
+            --name foundation-${{ github.run_id}} \
+            --resource-group "$RG_NAME" \
+            --template-file services/azure-managed-monitoring/src/main.foundation.bicep \
+            --parameters "@params.json" \
+            --output json > foundation.outputs.json
+
+          az deployment group wait \
+            --name foundation-${{ github.run_id }} \
+            --resource-group "$RG_NAME" \
+            --created
+
+          for i in {1..5}; do
+            if az monitor log-analytics workspace show --resource-group "$RG_NAME" --workspace-name "$WORKSPACE_NAME" &>/dev/null; then
+              echo "Workspace available"
+              break
+            else
+              echo "Workspace not ready yet, retrying..."
+              sleep 5
+            fi
+          done
+
+      - name: Upload Foundation Outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: foundation-outputs
+          path: foundation.outputs.json
+
+  deploy-assignment:
+    runs-on: ubuntu-latest
+    needs: deploy-foundation
+
+    steps:
+      - name: Checkout repository with submodules
+        uses:  actions/checkout@v6
+        with:
+          submodules: recursive
+          token: ${{ secrets.PAT_SUBMODULE_CHECKOUT }}
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_WRITE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_WRITE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Download Foundation Outputs
+        uses: actions/download-artifact@v4
+        with:
+          name: foundation-outputs
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: hydrated-config
+
+      - name: Extract Role Definitions from Policy Initiatives
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "🔍 Extracting role definitions from policy initiatives..."
+
+          # Custom Initiative Rollen extrahieren
+          echo "Extracting roles from custom initiative..."
+          CUSTOM_ROLES=$(az policy set-definition show \
+            --name "initiative-managed-monitoring" \
+            --query "policyDefinitions[].policyDefinition.properties.roleDefinitionIds[]" \
+            --output json 2>/dev/null | jq -c 'unique // []')
+
+          echo "Custom initiative roles: $CUSTOM_ROLES"
+
+          # Microsoft Standard Initiative Rollen extrahieren
+          echo "Extracting roles from Microsoft standard initiative..."
+          MS_ROLES=$(az policy set-definition show \
+            --name "924bfe3a-762f-40e7-86dd-5c8b95eb09e6" \
+            --query "policyDefinitions[].policyDefinition.properties.roleDefinitionIds[]" \
+            --output json 2>/dev/null | jq -c 'unique // []')
+
+          echo "Microsoft initiative roles: $MS_ROLES"
+
+          # UNION beider Listen, Duplikate entfernen
+          ALL_ROLES=$(jq -n --argjson custom "$CUSTOM_ROLES" \
+                            --argjson ms "$MS_ROLES" \
+                            '[$custom[], $ms[]] | unique')
+
+          echo "✅ All extracted roles (deduplicated): $ALL_ROLES"
+          echo "ROLE_DEFINITION_IDS=$ALL_ROLES" >> $GITHUB_ENV
+
+      - name: Validation - Check for Permission Growth
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "🔒 Validating permission growth..."
+
+          # Optional: Lade vorherige Role-Count (wenn vorhanden)
+          PREVIOUS_COUNT=0
+          if [ -f .role-count.txt ]; then
+            PREVIOUS_COUNT=$(cat .role-count.txt)
+          fi
+
+          CURRENT_COUNT=$(echo "$ROLE_DEFINITION_IDS" | jq 'length')
+
+          echo "Previous role count: $PREVIOUS_COUNT"
+          echo "Current role count: $CURRENT_COUNT"
+
+          if [ $CURRENT_COUNT -eq 0 ]; then
+            echo "⚠️  WARNING: No roles extracted! This may indicate an error."
+            echo "Deployment will continue, but please verify the policy definitions."
+          elif [ $CURRENT_COUNT -gt $((PREVIOUS_COUNT + 2)) ] && [ $PREVIOUS_COUNT -gt 0 ]; then
+            echo "⚠️  WARNING: Significant permission growth detected!"
+            echo "Roles increased from $PREVIOUS_COUNT to $CURRENT_COUNT"
+            echo "Please review the policy definitions to ensure this is intentional."
+            # Optional: exit 1 für Manual Approval
+          else
+            echo "✅ Permission growth check passed"
+          fi
+
+          # Speichere aktuelle Count für nächsten Run
+          echo $CURRENT_COUNT > .role-count.txt
+
+      - name: Deploy Policy Assignment + DCR
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          CONFIG_FILE="hydrated.config.json"
+          RG_NAME=$(jq -er '.deploymentSettings.resourceGroupName' "$CONFIG_FILE")
+          DCRNAME=$(jq -er '.bicepParameters.dcrName.value' "$CONFIG_FILE")
+          INITIATIVE_ID=$(jq -er '.properties.outputs.initiativeId.value' foundation.outputs.json)
+          WORKSPACE_ID=$(jq -er '.properties.outputs.workspaceId.value' foundation.outputs.json)
+
+          # Extract enableMicrosoftVMsInitiative from config (check if initiative is enabled)
+          ENABLE_MS_VMS=$(jq -r '.bicepParameters.initiatives[] | select(.name == "EnableMonitoringAzureVMsAMA") | .enabled // false' "$CONFIG_FILE")
+
+          echo "📦 Creating deployment parameters with dynamic roles..."
+          cat > params.assignment.json <<EOF
+          {
+            "initiativeId": { "value": "$INITIATIVE_ID" },
+            "logAnalyticsWorkspaceId": { "value": "$WORKSPACE_ID" },
+            "policyInitiativeScope": { "value": [] },
+            "dcrName": { "value": "$DCRNAME" },
+            "roleDefinitionIds": { "value": $ROLE_DEFINITION_IDS },
+            "enableMicrosoftVMsInitiative": { "value": $ENABLE_MS_VMS }
+          }
+          EOF
+
+          echo "Deployment parameters:"
+          jq . params.assignment.json
+
+          echo "🚀 Deploying Policy Assignment + DCR with dynamic roles..."
+          az deployment group create \
+            --name assignment-${{ github.run_id }} \
+            --resource-group "$RG_NAME" \
+            --template-file services/azure-managed-monitoring/src/main.assignment.bicep \
+            --parameters @params.assignment.json \
+            --output json > assignment.outputs.json
+
+          az deployment group wait \
+            --name assignment-${{ github.run_id }} \
+            --resource-group "$RG_NAME" \
+            --created
+
+
+      - name: Upload Assignment Outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: assignment-outputs
+          path: assignment.outputs.json
+
+  deploy-monitoring:
+    runs-on: ubuntu-latest
+    needs: deploy-assignment
+
+    steps:
+      - name: Checkout repository with submodules
+        uses:  actions/checkout@v6
+        with:
+          submodules: recursive
+          token: ${{ secrets.PAT_SUBMODULE_CHECKOUT }}
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_WRITE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_WRITE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Download Assignment Outputs
+        uses: actions/download-artifact@v4
+        with:
+          name: assignment-outputs
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: hydrated-config
+
+      - name: Deploy Monitoring / Workbook + Alerts
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          CONFIG_FILE="hydrated.config.json"
+          RG_NAME=$(jq -er '.deploymentSettings.resourceGroupName' "$CONFIG_FILE")
+          WORKSPACE_NAME=$(jq -er '.bicepParameters.workspaceName.value' "$CONFIG_FILE")
+          ACTION_GROUP_NAME=$(jq -er '.bicepParameters.actionGroupName.value' "$CONFIG_FILE")
+          DCRNAME=$(jq -er '.bicepParameters.dcrName.value' "$CONFIG_FILE")
+          LOCATION=$(jq -er '.deploymentSettings.location' "$CONFIG_FILE")
+          SUBSCRIPTION_ID="${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+
+          cat > params.monitoring.json <<EOF
+          {
+            "logAnalyticsWorkspaceId": { "value": "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RG_NAME/providers/Microsoft.OperationalInsights/workspaces/$WORKSPACE_NAME" },
+            "actionGroupId": { "value": "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RG_NAME/providers/Microsoft.Insights/actionGroups/$ACTION_GROUP_NAME" }
+          }
+          EOF
+
+          echo "📦 Deploying Monitoring / Workbook + Alerts..."
+          az deployment group create \
+            --name monitoring-${{ github.run_id }} \
+            --resource-group "$RG_NAME" \
+            --template-file services/azure-managed-monitoring/src/main.workbook.bicep \
+            --parameters @params.monitoring.json \
+            --output json > monitoring.outputs.json
+
+      - name: Upload Monitoring Outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: monitoring-outputs
+          path: monitoring.outputs.json

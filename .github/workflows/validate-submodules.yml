@@ -1,0 +1,96 @@
+# .github/workflows/validate-submodules.yml
+name: 'Validate Submodules'
+
+on:
+  push:
+    branches-ignore:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch: {}
+
+jobs:
+  validate:
+    name: 'Validate Submodule Configuration'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          fetch-depth: 0
+          token: ${{ secrets.PAT_SUBMODULE_CHECKOUT }}
+
+      - name: Check submodule initialization
+        shell: bash
+        run: |
+          echo "=== Checking submodule initialization ==="
+          git submodule status
+
+          if git submodule status | grep -q '^-'; then
+            echo "❌ Error: Some submodules are not initialized"
+            exit 1
+          fi
+          echo "✅ All submodules are initialized"
+
+      - name: Validate submodule branches
+        shell: bash
+        run: |
+          echo "=== Validating submodule branches ==="
+
+          # Lese alle Submodule aus .gitmodules
+          git config --file .gitmodules --get-regexp '^submodule\..*\.branch$' | while read key value; do
+            # Extrahiere Submodul-Namen
+            submodule_name=$(echo "$key" | sed 's/^submodule\.\(.*\)\.branch$/\1/')
+            submodule_path=$(git config --file .gitmodules --get "submodule.$submodule_name.path")
+            expected_branch="$value"
+
+            echo "Checking $submodule_path..."
+
+            # Gehe ins Submodul
+            cd "$submodule_path"
+
+            # 1. Hole den aktuell ausgecheckten Commit (im Detached HEAD Zustand)
+            current_commit=$(git rev-parse HEAD)
+            echo "  -> Current commit is $current_commit"
+
+            # 2. Prüfe, ob dieser Commit auf dem erwarteten Remote-Branch existiert.
+            # 'git branch -r --contains <commit>' listet alle Remote-Branches auf,
+            # die diesen Commit enthalten. Wir filtern dann nach dem erwarteten Branch.
+            if git branch -r --contains "$current_commit" | grep -q "origin/$expected_branch"; then
+              echo "✅ Submodule '$submodule_path' commit exists on expected branch '$expected_branch'"
+            else
+              echo "❌ Error: Submodule '$submodule_path' commit $current_commit was NOT found on remote branch 'origin/$expected_branch'"
+              # Optional: Zeige zur Fehlersuche, auf welchen Branches der Commit wirklich ist
+              echo "  -> Commit was found on these remote branches:"
+              git branch -r --contains "$current_commit"
+              exit 1
+            fi
+
+            echo "✅ Submodule '$submodule_path' is on correct branch: $current_branch"
+            cd - > /dev/null
+          done
+
+      - name: Check for uncommitted changes
+        shell: bash
+        run: |
+          echo "=== Checking for uncommitted changes in submodules ==="
+
+          git submodule foreach --recursive '
+            if [ -n "$(git status --porcelain)" ]; then
+              echo "❌ Error: Submodule $name has uncommitted changes"
+              git status --short
+              exit 1
+            fi
+          '
+
+          echo "✅ No uncommitted changes in submodules"
+
+      - name: Display submodule information
+        if: always()
+        shell: bash
+        run: |
+          echo "=== Submodule Information ==="
+          git submodule foreach --recursive 'echo "Submodule: $name"; git log -1 --oneline; echo ""'

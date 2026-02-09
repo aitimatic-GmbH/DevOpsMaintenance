@@ -1,0 +1,38 @@
+# .github/workflows/run-finops-analysis.yml
+name: 'Run FinOps Analysis'
+
+on:
+  # schedule:
+  #   - cron: '0 3 * * 1' # Jeden Montag um 3 Uhr morgens
+  push:
+    branches-ignore:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch: {}
+
+jobs:
+  analyze-and-report:
+    name: 'Run FinOps Analyze & Report'
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: 'Checkout repository with submodules'
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          fetch-depth: 0
+          token: ${{ secrets.PAT_SUBMODULE_CHECKOUT }}
+
+      - name: 'Run FinOps Analysis'
+        uses: ./services/azure-finops-manager/actions/finops-analysis
+        with:
+          config-path: './config/finops.config.json.example'
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}

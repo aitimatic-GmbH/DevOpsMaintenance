@@ -1,4 +1,8 @@
 [submodule "services/azure-finops-manager"]
 	path = services/azure-finops-manager
 	url = https://github.com/aitimatic-GmbH/azure-finops-manager.git
-	branch = chore/ci-submodule-workflow-conform
+	branch = main
+[submodule "services/azure-managed-monitoring"]
+	path = services/azure-managed-monitoring
+  url = https://github.com/aitimatic-GmbH/azure-managed-monitoring.git
+  branch = feat/enable-dual-mode-execution

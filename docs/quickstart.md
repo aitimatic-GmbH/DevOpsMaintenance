@@ -29,9 +29,12 @@ Bevor Sie einen spezifischen Service bereitstellen können, müssen die grundleg
     - `AZURE_SUBSCRIPTION_ID` - Azure Subscription ID
     - `PAT_SUBMODULE_CHECKOUT` - Personal Access Token für Submodule-Zugriff (nur bei privaten Submodules)
 
-    **Optional (für Remediation):**
+    **Optional (für Remediation / Monitoring Deployment):**
     - `AZURE_WRITE_CLIENT_ID` - Azure Service Principal App ID (Write)
     - `AZURE_WRITE_TENANT_ID` - Azure Tenant ID (Write)
+
+    **Für Managed Monitoring:**
+    - `MON_CONFIG_JSON` - JSON-Override für sensible Monitoring-Konfigurationswerte
 
     Die Erstellung und Konfiguration der Secrets wird in der jeweiligen Service-Anleitung beschrieben.
 
@@ -46,10 +49,16 @@ Wählen Sie den Service aus, den Sie bereitstellen möchten, und folgen Sie der 
 ### Verfügbare Services:
 
 *   #### **Azure FinOps Manager**
-    *   **Zweck:** Analysiert Kosten und identifiziert Einsparpotenziale in Azure.
-    *   **Anleitung:** [**`services/azure-finops-manager/README.md`**](./services/azure-finops-manager/README.md) [**`fork-azure-finops-manager.md`**](fork-azure-finops-manager.md)
+    *   **Zweck:** Analysiert Cloud-Kosten und identifiziert Einsparpotenziale in Azure.
+    *   **Anleitung:** [**`services/azure-finops-manager/README.md`**](../services/azure-finops-manager/README.md)
+    *   **Setup-Guide:** [**`setup-guide-finops.md`**](setup-guide-finops.md)
 
-*   #### **Service XYZ (Beispiel für die Zukunft)**
-    *   **Zweck:** Beschreibt, was dieser Service tut.
-    *   **Anleitung:** [**`services/service-xyz/README.md`**](./services/service-xyz/README.md)
+*   #### **Azure Managed Monitoring Essentials**
+    *   **Zweck:** Automatisierte Monitoring-Infrastruktur mit Azure Policy, Log Analytics und Alerting.
+    *   **Anleitung:** [**`services/azure-managed-monitoring/README.md`**](../services/azure-managed-monitoring/README.md)
+    *   **Setup-Guide:** [**`setup-guide-monitoring.md`**](setup-guide-monitoring.md)
+
+---
+
+Ausführlicher Setup Guide: [setup-guide.md](setup-guide.md) | Alle Dokumente: [index.md](index.md)
 

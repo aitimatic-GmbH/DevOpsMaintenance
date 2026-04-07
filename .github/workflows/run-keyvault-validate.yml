@@ -1,0 +1,80 @@
+# .github/workflows/run-keyvault-validate.yml
+# ---------------------------------------------------------------------------
+# CI: KeyVault Managed Identity -- Bicep Lint, Build & Validierung
+# ---------------------------------------------------------------------------
+# Wrapper-Workflow für das service-keyvault-managed-identity Submodule.
+# Verwendet die Composite Actions aus dem Submodule direkt.
+# ---------------------------------------------------------------------------
+
+name: "Run KeyVault Validate"
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'feat/**'
+    paths:
+      - 'services/service-keyvault-managed-identity/**'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'services/service-keyvault-managed-identity/**'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1: Lint & Build (keine Azure-Credentials nötig)
+  # ---------------------------------------------------------------------------
+  lint-and-build:
+    name: "Lint & Build"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository with submodules
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          token: ${{ secrets.PAT_SUBMODULE_CHECKOUT }}
+
+      - name: Validate (lint + build)
+        uses: ./services/service-keyvault-managed-identity/.github/actions/validate
+        with:
+          working-directory: services/service-keyvault-managed-identity
+          mode: lint
+
+  # ---------------------------------------------------------------------------
+  # Job 2: Azure Deployment-Validierung (Matrix: dev, staging, prod)
+  # ---------------------------------------------------------------------------
+  validate:
+    name: "Validate (${{ matrix.environment }})"
+    runs-on: ubuntu-latest
+    needs: lint-and-build
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [dev, staging, prod]
+
+    steps:
+      - name: Checkout repository with submodules
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          token: ${{ secrets.PAT_SUBMODULE_CHECKOUT }}
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Validate against Azure (${{ matrix.environment }})
+        uses: ./services/service-keyvault-managed-identity/.github/actions/validate
+        with:
+          working-directory: services/service-keyvault-managed-identity
+          mode: full
+          environment: ${{ matrix.environment }}

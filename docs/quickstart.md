@@ -58,7 +58,12 @@ Wählen Sie den Service aus, den Sie bereitstellen möchten, und folgen Sie der 
     *   **Anleitung:** [**`services/azure-managed-monitoring/README.md`**](../services/azure-managed-monitoring/README.md)
     *   **Setup-Guide:** [**`setup-guide-monitoring.md`**](setup-guide-monitoring.md)
 
+*   #### **KeyVault Managed Identity**
+    *   **Zweck:** Secrets zentral verwalten und passwortlos auf Azure-Ressourcen zugreifen.
+    *   **Anleitung:** [**`services/service-keyvault-managed-identity/README.md`**](../services/service-keyvault-managed-identity/README.md)
+    *   **Setup-Guide:** [**`setup-guide-keyvault.md`**](setup-guide-keyvault.md)
+
 ---
 
-Ausführlicher Setup Guide: [setup-guide.md](setup-guide.md) | Alle Dokumente: [index.md](index.md)
+Ausführlicher Setup Guide: [setup-guide.md](setup-guide.md) | Alle Dokumente: [README.md](README.md)
 

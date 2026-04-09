@@ -189,4 +189,4 @@ Der Analysis-Workflow läuft automatisch bei:
 
 ---
 
-← Zurück zum [Setup Guide](setup-guide.md) | [Dokumentations-Index](index.md)
+← Zurück zum [Setup Guide](setup-guide.md) | [Dokumentations-Index](README.md)

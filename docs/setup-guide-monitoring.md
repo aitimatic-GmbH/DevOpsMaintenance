@@ -142,4 +142,4 @@ Nach erfolgreichem Deployment:
 
 ---
 
-← Zurück zum [Setup Guide](setup-guide.md) | [Dokumentations-Index](index.md)
+← Zurück zum [Setup Guide](setup-guide.md) | [Dokumentations-Index](README.md)

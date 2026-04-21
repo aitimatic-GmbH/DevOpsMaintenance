@@ -33,7 +33,27 @@ Ein leistungsstarker Service zur proaktiven Senkung von Cloud-Kosten in Microsof
 | **Technologie** | GitHub Actions, OIDC für sichere Azure-Verbindung, JSON-Konfiguration. |
 | **Details** | siehe die [**README des `azure-finops-manager`**](./services/azure-finops-manager/README.md). |
 
-*weitere Services werden hier in Zukunft hinzugefügt.*
+### 2. Azure Managed Monitoring Essentials
+
+Automatisiertes Monitoring für Azure-Ressourcen auf Basis von Azure Policy.
+
+| Service | `azure-managed-monitoring` |
+| :--- | :--- |
+| **Ziel** | Stellt Log Analytics Workspace, Data Collection Rules und Policy-Zuweisungen bereit. Alerting und Workbooks für VM-Monitoring inklusive. |
+| **Ansatz** | 3-Phasen-Deployment (Foundation → Assignment → Monitoring) via GitHub Actions. Policy-gesteuerte Diagnostik mit dynamischer RBAC-Extraktion. |
+| **Technologie** | GitHub Actions, Bicep, Azure Policy, OIDC. |
+| **Details** | siehe die [**README des `azure-managed-monitoring`**](./services/azure-managed-monitoring/README.md). |
+
+### 3. KeyVault Managed Identity
+
+Secrets zentral verwalten und passwortlos auf Azure-Ressourcen zugreifen.
+
+| Service | `service-keyvault-managed-identity` |
+| :--- | :--- |
+| **Ziel** | Stellt Azure Key Vault mit Managed Identity Integration bereit. Anwendungen greifen ohne Passwörter auf Secrets zu. |
+| **Ansatz** | Modulare Bicep-Infrastruktur mit optionalen Komponenten (Web App, Functions, Networking). What-If Vorschau vor jedem Deployment. |
+| **Technologie** | GitHub Actions, Bicep, Azure Key Vault, Managed Identity, OIDC. |
+| **Details** | siehe die [**README des `service-keyvault-managed-identity`**](./services/service-keyvault-managed-identity/README.md). |
 
 ---
 

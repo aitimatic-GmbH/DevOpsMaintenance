@@ -70,6 +70,7 @@ Wählen Sie den Service, den Sie bereitstellen möchten. Jeder Service hat eigen
 |---------|-------|-----------|
 | **Azure FinOps Manager** | Cloud-Kosten analysieren und optimieren | [setup-guide-finops.md](setup-guide-finops.md) |
 | **Azure Managed Monitoring** | Automatisiertes Monitoring mit Azure Policy | [setup-guide-monitoring.md](setup-guide-monitoring.md) |
+| **KeyVault Managed Identity** | Secrets zentral verwalten mit Managed Identity | [setup-guide-keyvault.md](setup-guide-keyvault.md) |
 
 ---
 

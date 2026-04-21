@@ -6,3 +6,7 @@
 	path = services/azure-managed-monitoring
   url = https://github.com/aitimatic-GmbH/azure-managed-monitoring.git
   branch = main
+[submodule "services/service-keyvault-managed-identity"]
+	path = services/service-keyvault-managed-identity
+	url = https://github.com/aitimatic-GmbH/service-keyvault-managed-identity.git
+	branch = main

@@ -40,6 +40,19 @@ Automatisiertes Monitoring mit Azure Policy, Log Analytics und Alerting.
 
 ---
 
+## KeyVault Managed Identity
+
+Secrets zentral verwalten und passwortlos auf Azure-Ressourcen zugreifen.
+
+- [setup-guide-keyvault.md](setup-guide-keyvault.md) — Service Principal, Secrets und Deployment einrichten
+- [README](../services/service-keyvault-managed-identity/README.md) — Service-Übersicht und Architektur
+- [architecture.md](../services/service-keyvault-managed-identity/docs/architecture.md) — Systemarchitektur und Komponenten
+- [concepts.md](../services/service-keyvault-managed-identity/docs/concepts.md) — Key Vault und Managed Identity Konzepte
+- [deployment-guide.md](../services/service-keyvault-managed-identity/docs/deployment-guide.md) — Deployment-Schritte und Umgebungen
+- [BACKLOG.md](../services/service-keyvault-managed-identity/docs/BACKLOG.md) — Geplante Features und Roadmap
+
+---
+
 ## Rechtliches
 
 - [LICENSE](../LICENSE) — MIT License, Copyright aitimatic GmbH

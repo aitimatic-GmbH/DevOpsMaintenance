@@ -1,0 +1,93 @@
+# .github/workflows/run-keyvault-deploy.yml
+# ---------------------------------------------------------------------------
+# CD: KeyVault Managed Identity -- Deploy (What-If + Deploy)
+# ---------------------------------------------------------------------------
+# Wrapper-Workflow für das service-keyvault-managed-identity Submodule.
+# Verwendet die Composite Actions aus dem Submodule direkt.
+# ---------------------------------------------------------------------------
+
+name: "Run KeyVault Deploy"
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Zielumgebung"
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      skip-what-if:
+        description: "What-If Vorschau überspringen"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1: What-If Vorschau
+  # ---------------------------------------------------------------------------
+  what-if:
+    name: "What-If (${{ inputs.environment }})"
+    runs-on: ubuntu-latest
+    if: inputs.skip-what-if != true
+
+    steps:
+      - name: Checkout repository with submodules
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          token: ${{ secrets.PAT_SUBMODULE_CHECKOUT }}
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_WRITE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_WRITE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: What-If preview
+        uses: ./services/service-keyvault-managed-identity/.github/actions/deploy
+        with:
+          working-directory: services/service-keyvault-managed-identity
+          environment: ${{ inputs.environment }}
+          mode: what-if
+
+  # ---------------------------------------------------------------------------
+  # Job 2: Deploy (mit Environment Gate für Approval)
+  # ---------------------------------------------------------------------------
+  deploy:
+    name: "Deploy (${{ inputs.environment }})"
+    runs-on: ubuntu-latest
+    needs: what-if
+    if: >-
+      always()
+      && (needs.what-if.result == 'success' || needs.what-if.result == 'skipped')
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - name: Checkout repository with submodules
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          token: ${{ secrets.PAT_SUBMODULE_CHECKOUT }}
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_WRITE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_WRITE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy to ${{ inputs.environment }}
+        uses: ./services/service-keyvault-managed-identity/.github/actions/deploy
+        with:
+          working-directory: services/service-keyvault-managed-identity
+          environment: ${{ inputs.environment }}
+          mode: deploy
